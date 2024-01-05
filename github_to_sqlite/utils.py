@@ -17,6 +17,7 @@ FTS_CONFIG = {
     "releases": ["name", "body"],
     "repos": ["name", "description"],
     "users": ["login", "name"],
+    "workflows": ["name", "id", "repo"]
 }
 
 VIEWS = {
@@ -820,25 +821,35 @@ def fetch_workflows(token, full_name):
     headers = make_headers(token)
     url = "https://api.github.com/repos/{}/contents/.github/workflows".format(full_name)
     response = requests.get(url, headers=headers)
+    
     if response.status_code == 404:
         return {}
     workflows = {}
     for item in response.json():
         name = item["name"]
         content = requests.get(item["download_url"]).text
-        workflows[name] = content
+        url = "https://api.github.com/repos/{}/actions/workflows/{}".format(full_name, item["name"])
+        workflow_response = requests.get(url, headers=headers)
+        workflows[name] = {}
+        workflows[name]["id"] =  workflow_response.json()["id"]
+        workflows[name]["content"] = content
+
     return workflows
 
 
-def save_workflow(db, repo_id, filename, content):
-    workflow = yaml.safe_load(content)
+def save_workflow(db, repo_id, filename, id, content):
+    try:
+        workflow = yaml.safe_load(content)
+    except yaml.scanner.ScannerError:
+        return
+    # workflow = yaml.safe_load(content)
     jobs = workflow.pop("jobs", None) or {}
     # If there's a `True` key it was probably meant to be "on" - grr YAML
     if True in workflow:
         workflow["on"] = workflow.pop(True)
     # Replace workflow if one exists already
     existing = list(
-        db["workflows"].rows_where("repo = ? and filename = ?", [repo_id, filename])
+        db["workflows"].rows_where("repo = ? and filename = ? and id = ?", [repo_id, filename, id])
     )
     if existing:
         # Delete jobs, steps and this record
@@ -857,6 +868,7 @@ def save_workflow(db, repo_id, filename, content):
                     "repo": repo_id,
                     "filename": filename,
                     "name": workflow.get("name", filename),
+                    "id": id,
                 },
             },
             pk="id",
@@ -866,7 +878,7 @@ def save_workflow(db, repo_id, filename, content):
         )
         .last_pk
     )
-    db["workflows"].create_index(["repo", "filename"], unique=True, if_not_exists=True)
+    db["workflows"].create_index(["repo", "filename", "id"], unique=True, if_not_exists=True)
     for job_name, job_details in jobs.items():
         steps = job_details.pop("steps", None) or []
         job_id = (

@@ -644,8 +644,8 @@ def workflows(db_path, repos, auth):
         full_repo = utils.fetch_repo(repo, token=token)
         repo_id = utils.save_repo(db, full_repo)
         workflows = utils.fetch_workflows(token, full_repo["full_name"])
-        for filename, content in workflows.items():
-            utils.save_workflow(db, repo_id, filename, content)
+        for filename, info in workflows.items():
+            utils.save_workflow(db, repo_id, filename, info["id"], info["content"])
     utils.ensure_db_shape(db)
 
 
