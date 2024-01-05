@@ -818,14 +818,14 @@ def rewrite_readme_html(html):
 
 def fetch_workflows(token, full_name):
     headers = make_headers(token)
-    url = "https://api.github.com/repos/{}/actions/workflows".format(full_name)
+    url = "https://api.github.com/repos/{}/contents/.github/workflows".format(full_name)
     response = requests.get(url, headers=headers)
     if response.status_code == 404:
         return {}
     workflows = {}
     for item in response.json():
         name = item["name"]
-        content = requests.get(item["html_url"]).text
+        content = requests.get(item["download_url"]).text
         workflows[name] = content
     return workflows
 
