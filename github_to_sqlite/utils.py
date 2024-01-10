@@ -17,7 +17,8 @@ FTS_CONFIG = {
     "releases": ["name", "body"],
     "repos": ["name", "description"],
     "users": ["login", "name"],
-    "workflows": ["name", "id", "repo"]
+    "workflows": ["name", "id", "repo"],
+    "runs": ["name", "id", "repo"],
 }
 
 VIEWS = {
@@ -836,6 +837,12 @@ def fetch_workflows(token, full_name):
 
     return workflows
 
+def fetch_runs(token, full_name):
+    headers = make_headers(token)
+    url = "https://api.github.com/repos/{}/actions/runs".format(full_name)
+
+    for runs in paginate(url, headers):
+        yield from runs["workflow_runs"]
 
 def save_workflow(db, repo_id, filename, id, content):
     try:
@@ -918,3 +925,47 @@ def save_workflow(db, repo_id, filename, id, content):
             pk="id",
             foreign_keys=["job", "repo"],
         )
+
+def save_runs(db, repo_id, runs):
+    foreign_keys = [
+        ("repo", "repos", "id"),
+        ("workflow", "workflows", "id")
+    ]
+
+    if not db["runs"].exists():
+        db["runs"].create(
+            {
+                "repo": int,
+                "id": int,
+                "name": str,
+                "node_id": str,
+                "conclusion": str,
+                "workflow": int,
+                "event": str
+            },
+            pk="id",
+            foreign_keys=foreign_keys,
+        )
+        
+    for run in runs:
+        repo = repo_id
+        id = run.get("id")
+        name = run.get("name")
+        node_id = run.get("node_id")
+        conclusion = run.get("conclusion")
+        workflow_id = run.get("workflow_id")
+        event = run.get("event")
+
+        db["runs"].insert(
+            {
+                "repo": repo,
+                "id": id,
+                "name": name,
+                "node_id": node_id,
+                "conclusion": conclusion,
+                "workflow": workflow_id,
+                "event": event
+            },
+            pk="id",
+            replace=True,
+        ).last_pk
