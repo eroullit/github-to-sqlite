@@ -671,6 +671,35 @@ def runs(db_path, repos, auth):
         repo_id = utils.save_repo(db, full_repo)
         runs = utils.fetch_runs(token, full_repo["full_name"])
         utils.save_runs(db, repo_id, runs)
+
+    utils.ensure_db_shape(db)
+
+@cli.command(name="jobs-runs")
+@click.argument(
+    "db_path",
+    type=click.Path(file_okay=True, dir_okay=False, allow_dash=False),
+    required=True,
+)
+@click.argument("repos", type=str, nargs=-1)
+@click.option(
+    "-a",
+    "--auth",
+    type=click.Path(file_okay=True, dir_okay=False, allow_dash=True),
+    default="auth.json",
+    help="Path to auth.json token file",
+)
+def jobs_runs(db_path, repos, auth):
+    "Fetch details of the jobs executed during a GitHub Actions workflows run for the specified repositories"
+    db = sqlite_utils.Database(db_path)
+    token = load_token(auth)
+    for repo in repos:
+        full_repo = utils.fetch_repo(repo, token=token)
+        runs = utils.fetch_runs(token, full_repo["full_name"])
+        for run in runs:
+            jobs = utils.fetch_jobs_runs(token, full_repo["full_name"], run["id"])
+            print("Fetching job runs for run {}".format(run["id"]))
+            utils.save_jobs_runs(db, full_repo["full_name"], jobs)
+
     utils.ensure_db_shape(db)
 
 def load_token(auth):

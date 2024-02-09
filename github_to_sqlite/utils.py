@@ -19,6 +19,7 @@ FTS_CONFIG = {
     "users": ["login", "name"],
     "workflows": ["name", "id", "repo"],
     "runs": ["name", "id", "repo"],
+    "jobs-runs": ["name", "id", "repo", "run", "runner_name", "runner_group_name"],
 }
 
 VIEWS = {
@@ -844,6 +845,13 @@ def fetch_runs(token, full_name):
     for runs in paginate(url, headers):
         yield from runs["workflow_runs"]
 
+def fetch_jobs_runs(token, full_name, run_id):
+    headers = make_headers(token)
+    url = "https://api.github.com/repos/{}/actions/runs/{}/jobs".format(full_name, run_id)
+
+    for runs in paginate(url, headers):
+        yield from runs["jobs"]
+
 def save_workflow(db, repo_id, filename, id, content):
     try:
         workflow = yaml.safe_load(content)
@@ -929,7 +937,7 @@ def save_workflow(db, repo_id, filename, id, content):
 def save_runs(db, repo_id, runs):
     foreign_keys = [
         ("repo", "repos", "id"),
-        ("workflow", "workflows", "id")
+        ("workflow", "workflows", "id"),
     ]
 
     if not db["runs"].exists():
@@ -965,6 +973,63 @@ def save_runs(db, repo_id, runs):
                 "conclusion": conclusion,
                 "workflow": workflow_id,
                 "event": event
+            },
+            pk="id",
+            replace=True,
+        ).last_pk
+
+def save_jobs_runs(db, repo_id, jobs):
+    foreign_keys = [
+        ("repo", "repos", "id"),
+        ("run", "runs", "id"),
+        ("workflow", "workflows", "id"),
+    ]
+
+    if not db["jobs-runs"].exists():
+        db["jobs-runs"].create(
+            {
+                "repo": int,
+                "run": int,
+                "workflow": int,
+                "id": int,
+                "node_id": str,
+                "status": str,
+                "name": str,
+                "runner_id": int,
+                "runner_name": str,
+                "runner_group_id": int,
+                "runner_group_name": str,
+            },
+            pk="id",
+            foreign_keys=foreign_keys,
+        )
+        
+    for job in jobs:
+        repo = repo_id
+        run = job.get("run_id")
+        workflow = job.get("workflow")
+        id = job.get("id")
+        node_id = job.get("node_id")
+        status = job.get("status")
+        name = job.get("name")
+        runner_id = job.get("runner_id")
+        runner_name = job.get("runner_name")
+        runner_group_id = job.get("runner_group_id")
+        runner_group_name = job.get("runner_group_name")
+
+        db["jobs-runs"].insert(
+            {
+                "repo": repo,
+                "run": run,
+                "workflow": workflow,
+                "id": id,
+                "node_id": node_id,
+                "status": status,
+                "name": name,
+                "runner_id": runner_id,
+                "runner_name": runner_name,
+                "runner_group_id": runner_group_id,
+                "runner_group_name": runner_group_name
             },
             pk="id",
             replace=True,
